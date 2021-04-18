@@ -19,6 +19,19 @@ Mesh theModel;
 int theCurrentModel = 0;
 vector<string> theModelNames;
 
+
+float lastXPos = 500.0f/2;
+float lastYPos = 500.0f/2;
+float azimuth = 0.0f;
+float elevation = 0.0f;
+float dist = 2.5f;
+
+//camera
+glm::mat4 camera = glm::lookAt(glm::vec3(0,0,dist), glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
+
+bool mouse_pressed = false;
+bool shift_pressed = false;
+
 // OpenGL IDs
 GLuint theVboPosId;
 GLuint theVboNormalId;
@@ -82,22 +95,49 @@ static void mouse_button_callback(GLFWwindow* window, int button, int action, in
    double xpos, ypos;
    glfwGetCursorPos(window, &xpos, &ypos);
 
-   // TODO: Camera controls
-
    int state = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT);
    if (state == GLFW_PRESS)
    {
+      mouse_pressed = true;
        int keyPress = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT);
-       if (keyPress == GLFW_PRESS) {}
+       if (keyPress == GLFW_PRESS) {
+          shift_pressed = true;
+       } else {
+          shift_pressed = false;
+       }
    }
    else if (state == GLFW_RELEASE)
    {
+      mouse_pressed = false;
    }
 }
 
 static void cursor_position_callback(GLFWwindow* window, double xpos, double ypos)
 {
-   // TODO: Camera controls
+   if(mouse_pressed) {
+
+      // compute change in mouse movement
+      float changeX = xpos - lastXPos;
+      float changeY = ypos - lastYPos;
+
+      // if shift pressed, change distance from object
+      if(shift_pressed) {
+         float s = 0.06f;
+         dist += changeY * s;
+         dist -= changeX * s;
+      } else {
+         azimuth -= changeX;
+         elevation += changeY;
+
+         // prevent object from flipping
+         if (elevation > 89.9f)
+            elevation = 89.9f;
+         if (elevation < -89.9f)
+            elevation = -89.9f;
+      }
+   }
+   lastXPos = xpos;
+   lastYPos = ypos;
 }
 
 static void PrintShaderErrors(GLuint id, const std::string label)
@@ -243,14 +283,67 @@ int main(int argc, char** argv)
 
    LoadModels("../models/");
    LoadModel(0);
+   cout << "Current file: " << theModelNames[0] << endl;
 
    GLuint shaderId = LoadShader("../shaders/phong.vs", "../shaders/phong.fs");
    glUseProgram(shaderId);
+
+   GLuint matrixParam = glGetUniformLocation(shaderId, "MVP");
+   GLuint mvId= glGetUniformLocation(shaderId, "ModelViewMatrix");
+   GLuint nmvId= glGetUniformLocation(shaderId, "NormalMatrix");
+
+   // set shader inputs
+   glUniform3f(glGetUniformLocation(shaderId, "Material.Ks"), 1.0, 1.0, 1.0);
+   glUniform3f(glGetUniformLocation(shaderId, "Material.Kd"), 0.4, 0.6, 1.0);
+   glUniform3f(glGetUniformLocation(shaderId, "Material.Ka"), 0.1, 0.1, 0.1);
+   glUniform1f(glGetUniformLocation(shaderId, "Material.Shininess"), 80.0);
+   glUniform4f(glGetUniformLocation(shaderId, "Light.Position"), 100.0, 100.0, 100.0, 1);
+   glUniform3f(glGetUniformLocation(shaderId, "Light.La"), 1.0, 1.0, 1.0);
+   glUniform3f(glGetUniformLocation(shaderId, "Light.Ld"), 1.0, 1.0, 1.0);
+   glUniform3f(glGetUniformLocation(shaderId, "Light.Ls"), 1.0, 1.0, 1.0);
+       
+   glm::mat4 transform(1.0); // initialize to identity
+   glm::mat4 projection = glm::perspective(glm::radians(60.0f), 1.0f, 0.1f, 100.0f);
+
+   glClearColor(0, 0, 0, 1);
 
    // Loop until the user closes the window 
    while (!glfwWindowShouldClose(window))
    {
       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // Clear the buffers
+
+      // calculate lookfrom position
+      float x = dist * sin(glm::radians(azimuth)) * cos(glm::radians(elevation));
+      float y = dist * sin(glm::radians(elevation));
+      float z = dist * cos(glm::radians(azimuth)) * cos(glm::radians(elevation));
+      glm::vec3 lookfrom = glm::vec3(x, y, z);
+      camera = glm::lookAt(lookfrom, glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
+      
+      // translate and scale model to fit in view volume
+      glm::vec3 min_bounds = theModel.getMinBounds();
+      glm::vec3 max_bounds = theModel.getMaxBounds();
+      glm::vec3 size = max_bounds - min_bounds;
+      glm::vec3 center = (max_bounds + min_bounds) / 2.0f;
+
+      float translate_x = -1 * center.x;
+      float translate_y = -1 * center.y;
+      float translate_z = -1 * center.z;
+      
+      glm::mat4 transl = glm::translate(glm::mat4(1.0), glm::vec3(translate_x, translate_y, translate_z));
+
+      float max_size = std::max(size.x, size.y);
+      max_size = std::max(max_size, size.z);
+      float scale_factor = 2.0f / max_size;
+
+      glm::mat4 scale = glm::scale(mat4(1.0), glm::vec3(scale_factor, scale_factor, scale_factor));
+      transform = glm::translate(scale, glm::vec3(translate_x, translate_y, translate_z)); //translates and then scales
+
+      glm::mat4 mvp = projection * camera * transform;
+      glm::mat4 mv =  camera * transform;
+      glm::mat3 nmv = glm::mat3(glm::vec3(mv[0]), glm::vec3(mv[1]), glm::vec3(mv[2]));
+      glUniformMatrix4fv(matrixParam, 1, GL_FALSE, &mvp[0][0]);
+      glUniformMatrix3fv(nmvId, 1, GL_FALSE, &nmv[0][0]);
+      glUniformMatrix4fv(mvId, 1, GL_FALSE, &mv[0][0]);
 
       // Draw primitive
       glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, theElementbuffer);

@@ -14,8 +14,6 @@ using namespace glm;
 //camera
 glm::mat4 camera = glm::lookAt(glm::vec3(0,0,3), glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
 
-//float lastXPos = 0.0f;
-//float lastYPos = 0.0f;
 float lastXPos = 500.0f/2;
 float lastYPos = 500.0f/2;
 float azimuth = 0.0f;
@@ -51,9 +49,6 @@ static void mouse_button_callback(GLFWwindow* window, int button, int action, in
    double xpos, ypos;
    glfwGetCursorPos(window, &xpos, &ypos);
 
-   // TODO: CAmera controls
-   
-
    int state = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT);
    if (state == GLFW_PRESS)
    {
@@ -74,16 +69,18 @@ static void mouse_button_callback(GLFWwindow* window, int button, int action, in
 static void cursor_position_callback(GLFWwindow* window, double xpos, double ypos)
 {
    if(mouse_pressed) {
-      
+
       // compute change in mouse movement
       float changeX = xpos - lastXPos;
       float changeY = ypos - lastYPos;
       
       // if shift pressed, change distance from object
       if(shift_pressed) {
-         dist += changeY;
+         float s = 0.06f;
+         dist += changeY * s;
+         dist -= changeX * s;
       } else {
-         azimuth += changeX;
+         azimuth -= changeX;
          elevation += changeY;
 
          // prevent object from flipping
@@ -92,18 +89,9 @@ static void cursor_position_callback(GLFWwindow* window, double xpos, double ypo
          if (elevation < -89.9f)
             elevation = -89.9f;
       }
-
-         // calculate lookfrom position
-         float x = dist * sin(glm::radians(azimuth)) * cos(glm::radians(elevation));
-         float y = dist * sin(glm::radians(elevation));
-         float z = dist * cos(glm::radians(azimuth)) * cos(glm::radians(elevation));
-
-         lastXPos = xpos;
-         lastYPos = ypos;
-
-         glm::vec3 lookfrom = glm::vec3(x, y, z);
-         camera = glm::lookAt(lookfrom, glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
    }
+   lastXPos = xpos;
+   lastYPos = ypos;
 }
 
 static void PrintShaderErrors(GLuint id, const std::string label)
@@ -192,13 +180,6 @@ int main(int argc, char** argv)
       1.0, -1.0, 0.5,
       0.0, 1.0, 0.5
    };
-   /*const float positions[] =
-   {
-      1.0, -1.0, 0.5,
-     -1.0, -1.0, 0.5,
-      0.0, 1.0,  0.5,
-      0.0, -1.0, -0.5,
-   };*/
 
    const float normals[] =
    {
@@ -217,10 +198,6 @@ int main(int argc, char** argv)
    {
       0, 1, 2, 3, 4, 5, 6, 7, 8
    };
-   /*const unsigned int indices[] =
-   {
-      0, 1, 2, 1, 3, 2, 3, 0, 2
-   };*/
 
    int numTriangles = 3;
 
@@ -292,7 +269,6 @@ int main(int argc, char** argv)
    GLuint matrixParam = glGetUniformLocation(shaderId, "mvp");    
    glm::mat4 transform(1.0); // initialize to identity
    glm::mat4 projection = glm::perspective(glm::radians(60.0f), 1.0f, 0.1f, 10.0f);
-   //glm::mat4 camera = glm::lookAt(glm::vec3(0,0,3), glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
 
    glClearColor(0, 0, 0, 1);
 
@@ -301,21 +277,18 @@ int main(int argc, char** argv)
    {
       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // Clear the buffers
 
-      // Update transform
-      //float dx = 0.1 * sin(glfwGetTime());
-      /*float dist = 3.0f;
-      float lookfromX = dist * cos(glfwGetTime());
-      float lookfromZ = dist * sin(glfwGetTime());
-      glm::vec3 lookfrom = glm::vec3(lookfromX, 0, lookfromZ);
-      camera = glm::lookAt(lookfrom, glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));*/
+      // calculate lookfrom position
+      float x = dist * sin(glm::radians(azimuth)) * cos(glm::radians(elevation));
+      float y = dist * sin(glm::radians(elevation));
+      float z = dist * cos(glm::radians(azimuth)) * cos(glm::radians(elevation));
 
-      transform = glm::translate(glm::mat4(1.0), glm::vec3(0, 0, 0));
-      //transform = glm::translate(glm::mat4(1.0), glm::vec3(dx, 0, 0));
+      glm::vec3 lookfrom = glm::vec3(x, y, z);
+      camera = glm::lookAt(lookfrom, glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
+
       glm::mat4 mvp = projection * camera * transform;
       glUniformMatrix4fv(matrixParam, 1, GL_FALSE, &mvp[0][0]);
 
       // Draw primitive
-      //glDrawArrays(GL_TRIANGLES, 0, 3);
       glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementbuffer);
       glDrawElements(GL_TRIANGLES, numTriangles * 3, GL_UNSIGNED_INT, (void*)0);
 
