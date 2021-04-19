@@ -19,18 +19,20 @@ Mesh theModel;
 int theCurrentModel = 0;
 vector<string> theModelNames;
 
-
 float lastXPos = 500.0f/2;
 float lastYPos = 500.0f/2;
 float azimuth = 0.0f;
 float elevation = 0.0f;
 float dist = 2.5f;
 
-//camera
+// camera
 glm::mat4 camera = glm::lookAt(glm::vec3(0,0,dist), glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
 
 bool mouse_pressed = false;
 bool shift_pressed = false;
+
+// diffuse color
+glm::vec3 diffuse_color(0.4f, 0.6f, 1.0f);
 
 // OpenGL IDs
 GLuint theVboPosId;
@@ -68,12 +70,52 @@ static void key_callback(GLFWwindow* window, int key, int scancode, int action, 
       }
       cout << "Current file: " << theModelNames[theCurrentModel] << endl;
       LoadModel(theCurrentModel);
+
+      dist = 2.5f;
+      camera = glm::lookAt(glm::vec3(0,0,dist), glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
+      diffuse_color = glm::vec3(0.4f, 0.6f, 1.0f);
    }
    else if (key == 'N')
    {
       theCurrentModel = (theCurrentModel + 1) % theModelNames.size(); 
       cout << "Current file: " << theModelNames[theCurrentModel] << endl;
       LoadModel(theCurrentModel);
+
+      dist = 2.5f;
+      camera = glm::lookAt(glm::vec3(0,0,dist), glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
+      diffuse_color = glm::vec3(0.4f, 0.6f, 1.0f);
+   }
+   // increase red in diffuse color
+   else if (key == 'R')
+   {
+      if(diffuse_color.x > 0.9f) {
+         diffuse_color = glm::vec3(1.0f, diffuse_color.y, diffuse_color.z);
+      } else {
+         diffuse_color += glm::vec3(0.1f, 0, 0);
+      }
+   }
+   // increase green in diffuse color
+   else if (key == 'G')
+   {
+      if(diffuse_color.y > 0.9f) {
+         diffuse_color = glm::vec3(diffuse_color.x, 1.0f, diffuse_color.z);
+      } else {
+         diffuse_color += glm::vec3(0, 0.1f, 0);
+      }
+   }
+   // increase blue in diffuse color
+   else if (key == 'B')
+   {
+      if(diffuse_color.z > 0.9f) {
+         diffuse_color = glm::vec3(diffuse_color.x, diffuse_color.y, 1.0f);
+      } else {
+         diffuse_color += glm::vec3(0, 0, 0.1f);
+      }
+   }
+   // reset diffuse color to dark gray
+   else if (key == 'C')
+   {
+      diffuse_color = glm::vec3(0.05f,0.05f,0.05f);
    }
 }
 
@@ -285,7 +327,15 @@ int main(int argc, char** argv)
    LoadModel(0);
    cout << "Current file: " << theModelNames[0] << endl;
 
+   //default shader (per vertex)
    GLuint shaderId = LoadShader("../shaders/phong.vs", "../shaders/phong.fs");
+
+   //per fragment shader
+   //GLuint shaderId = LoadShader("../shaders/phong-perfrag.vs", "../shaders/phong-perfrag.fs");
+
+   // toon shader
+   //GLuint shaderId = LoadShader("../shaders/phong-perfrag.vs", "../shaders/cartoon.fs");
+
    glUseProgram(shaderId);
 
    GLuint matrixParam = glGetUniformLocation(shaderId, "MVP");
@@ -294,14 +344,14 @@ int main(int argc, char** argv)
 
    // set shader inputs
    glUniform3f(glGetUniformLocation(shaderId, "Material.Ks"), 1.0, 1.0, 1.0);
-   glUniform3f(glGetUniformLocation(shaderId, "Material.Kd"), 0.4, 0.6, 1.0);
    glUniform3f(glGetUniformLocation(shaderId, "Material.Ka"), 0.1, 0.1, 0.1);
    glUniform1f(glGetUniformLocation(shaderId, "Material.Shininess"), 80.0);
    glUniform4f(glGetUniformLocation(shaderId, "Light.Position"), 100.0, 100.0, 100.0, 1);
    glUniform3f(glGetUniformLocation(shaderId, "Light.La"), 1.0, 1.0, 1.0);
    glUniform3f(glGetUniformLocation(shaderId, "Light.Ld"), 1.0, 1.0, 1.0);
    glUniform3f(glGetUniformLocation(shaderId, "Light.Ls"), 1.0, 1.0, 1.0);
-       
+   glUniform3f(glGetUniformLocation(shaderId, "Light.Intensity"), 1.0, 1.0, 1.0); // for per fragment shading
+
    glm::mat4 transform(1.0); // initialize to identity
    glm::mat4 projection = glm::perspective(glm::radians(60.0f), 1.0f, 0.1f, 100.0f);
 
@@ -319,6 +369,9 @@ int main(int argc, char** argv)
       glm::vec3 lookfrom = glm::vec3(x, y, z);
       camera = glm::lookAt(lookfrom, glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
       
+      // set diffuse color 
+      glUniform3f(glGetUniformLocation(shaderId, "Material.Kd"), diffuse_color.x, diffuse_color.y, diffuse_color.z);
+
       // translate and scale model to fit in view volume
       glm::vec3 min_bounds = theModel.getMinBounds();
       glm::vec3 max_bounds = theModel.getMaxBounds();
@@ -328,7 +381,7 @@ int main(int argc, char** argv)
       float translate_x = -1 * center.x;
       float translate_y = -1 * center.y;
       float translate_z = -1 * center.z;
-      
+
       glm::mat4 transl = glm::translate(glm::mat4(1.0), glm::vec3(translate_x, translate_y, translate_z));
 
       float max_size = std::max(size.x, size.y);
